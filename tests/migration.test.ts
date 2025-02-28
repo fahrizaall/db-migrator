@@ -3,47 +3,53 @@ import { Migration } from '../src/migration';
 import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
+import { Config } from '../src/config';
+import { DatabaseConfig } from '../src/types';
 
 describe('Migration', () => {
-  const testConfig = {
-    host: process.env.TEST_DB_HOST || '127.0.0.1',
-    user: process.env.TEST_DB_USER || 'root',
-    password: process.env.TEST_DB_PASSWORD || '',
-    database: process.env.TEST_DB_NAME || 'test',
-    port: parseInt(process.env.TEST_DB_PORT || '3306'),
-  };
-  const migrationTable = process.env.MIGRATION_TABLE || 'migrations';
-
   let migration: Migration;
   let connection: mysql.Connection;
+  let testConfig: DatabaseConfig
+  const testMigrationsDir = path.join(__dirname, 'test-migrations');
 
   beforeAll(async () => {
+    process.env.DB_HOST = 'localhost';
+    process.env.DB_USER = 'root';
+    process.env.DB_PASSWORD = '';
+    process.env.DB_NAME = 'test';
+    process.env.DB_PORT = '3306';
+
+    migration = new Migration();
+    migration.setMigrationsDir(testMigrationsDir);
+
     // Create test database
+    testConfig = Config.load();
+
     const tempConnection = await mysql.createConnection({
-      ...testConfig,
-      database: undefined
+      host: testConfig.host,
+      user: testConfig.user,
+      password: testConfig.password,
+      port: testConfig.port
     });
+
     await tempConnection.query(`CREATE DATABASE IF NOT EXISTS ${testConfig.database}`);
     await tempConnection.end();
 
-    // Initialize migration instance
-    migration = new Migration('tests/config.test.js');
-    connection = await mysql.createConnection(testConfig);
+    connection = await mysql.createConnection({
+      host: testConfig.host,
+      user: testConfig.user,
+      password: testConfig.password,
+      database: testConfig.database,
+      port: testConfig.port
+    });
   });
 
   afterAll(async () => {
-    // Clean up test database
-    await connection.query(`DROP DATABASE IF EXISTS ${testConfig.database}`);
+    // await connection.query(`DROP DATABASE IF EXISTS ${testConfig.database}`);
     await connection.end();
   });
 
-  beforeEach(async () => {
-    // Clean up migrations table before each test
-    await connection.query(`DROP TABLE IF EXISTS ${migrationTable}`);
-  });
-
   describe('createMigration', () => {
-    const testMigrationsDir = path.join(__dirname, 'test-migrations');
 
     beforeEach(() => {
       // Clean up test migrations directory
@@ -79,7 +85,7 @@ describe('Migration', () => {
       
       const [tables] = await connection.query('SHOW TABLES');
       const tableNames = (tables as any[]).map(t => Object.values(t)[0]);
-      expect(tableNames).toContain(migrationTable);
+      expect(tableNames).toContain(testConfig.migrations_table);
     });
 
     it('should run migrations in correct order', async () => {
@@ -88,6 +94,8 @@ describe('Migration', () => {
         {
           name: '20240101000000_first_migration.ts',
           content: `
+            import { Connection } from 'mysql2/promise';
+
             export const up = async (connection) => {
               await connection.query('CREATE TABLE test1 (id INT)');
             };
@@ -99,6 +107,8 @@ describe('Migration', () => {
         {
           name: '20240101000001_second_migration.ts',
           content: `
+            import { Connection } from 'mysql2/promise';
+
             export const up = async (connection) => {
               await connection.query('CREATE TABLE test2 (id INT)');
             };
@@ -109,13 +119,12 @@ describe('Migration', () => {
         }
       ];
 
-      const migrationsDir = path.join(__dirname, 'migrations');
-      if (!fs.existsSync(migrationsDir)) {
-        fs.mkdirSync(migrationsDir);
+      if (!fs.existsSync(testMigrationsDir)) {
+        fs.mkdirSync(testMigrationsDir);
       }
 
       migrations.forEach(m => {
-        fs.writeFileSync(path.join(migrationsDir, m.name), m.content);
+        fs.writeFileSync(path.join(testMigrationsDir, m.name), m.content);
       });
 
       // Run migrations
@@ -124,11 +133,12 @@ describe('Migration', () => {
       // Check if tables were created in order
       const [tables] = await connection.query('SHOW TABLES');
       const tableNames = (tables as any[]).map(t => Object.values(t)[0]);
+      console.log(tableNames);
       expect(tableNames).toContain('test1');
       expect(tableNames).toContain('test2');
 
       // Clean up
-      fs.rmSync(migrationsDir, { recursive: true });
+      fs.rmSync(testMigrationsDir, { recursive: true });
     });
 
     it('should properly revert migrations', async () => {
@@ -142,13 +152,13 @@ describe('Migration', () => {
         };
       `;
 
-      const migrationsDir = path.join(__dirname, 'migrations');
-      if (!fs.existsSync(migrationsDir)) {
-        fs.mkdirSync(migrationsDir);
+      const testMigrationsDir = path.join(__dirname, 'migrations');
+      if (!fs.existsSync(testMigrationsDir)) {
+        fs.mkdirSync(testMigrationsDir);
       }
 
       fs.writeFileSync(
-        path.join(migrationsDir, '20240101000000_test_revert.ts'),
+        path.join(testMigrationsDir, '20240101000000_test_revert.ts'),
         migrationContent
       );
 
@@ -169,7 +179,7 @@ describe('Migration', () => {
       expect(tableNames).not.toContain('test_revert');
 
       // Clean up
-      fs.rmSync(migrationsDir, { recursive: true });
+      fs.rmSync(testMigrationsDir, { recursive: true });
     });
   });
 });

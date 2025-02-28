@@ -16,7 +16,17 @@ export class Migration {
   }
 
   private async createConnection(): Promise<Connection> {
-    return await mysql.createConnection(this.config);
+    return await mysql.createConnection({
+      host: this.config.host,
+      user: this.config.user,
+      password: this.config.password,
+      database: this.config.database,
+      port: this.config.port,
+    });
+  }
+
+  public setMigrationsDir(dir: string): void {
+    this.migrationsDir = dir;
   }
 
   public async createMigration(name: string): Promise<void> {
@@ -29,19 +39,19 @@ export class Migration {
     const filePath = path.join(this.migrationsDir, fileName);
 
     const template = `
-        import { Connection } from 'mysql2/promise';
+    import { Connection } from 'mysql2/promise';
 
-        export const up = async (connection: Connection): Promise<void> => {
-            // Write your migration up logic here
-            // Example:
-            // await connection.query('CREATE TABLE users (id INT PRIMARY KEY)');
-        };
+    export const up = async (connection: Connection): Promise<void> => {
+        // Write your migration up logic here
+        // Example:
+        // await connection.query('CREATE TABLE users (id INT PRIMARY KEY)');
+    };
 
-        export const down = async (connection: Connection): Promise<void> => {
-            // Write your migration down logic here
-            // Example:
-            // await connection.query('DROP TABLE users');
-        };
+    export const down = async (connection: Connection): Promise<void> => {
+        // Write your migration down logic here
+        // Example:
+        // await connection.query('DROP TABLE users');
+    };
     `;
 
     fs.writeFileSync(filePath, template);

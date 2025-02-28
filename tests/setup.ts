@@ -10,3 +10,8 @@ process.env.TEST_DB_USER = process.env.TEST_DB_USER || 'root';
 process.env.TEST_DB_PASSWORD = process.env.TEST_DB_PASSWORD || '';
 process.env.TEST_DB_NAME = process.env.TEST_DB_NAME || 'test_migrations';
 process.env.TEST_DB_PORT = process.env.TEST_DB_PORT || '3306';
+
+jest.mock('dotenv', () => ({
+    config: jest.fn(),
+}));
+  

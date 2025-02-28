@@ -17,7 +17,7 @@ const configSchema = z.object({
 });
 
 export class Config {
-  private static instance: DatabaseConfig;
+  private static instance: DatabaseConfig | undefined;
 
   static load(configPath?: string): DatabaseConfig {
     // Load environment variables
@@ -71,6 +71,16 @@ export class Config {
     } catch (error) {
       console.error('Configuration validation failed:', error);
       process.exit(1);
+    }
+  }
+
+  static clear(): void {
+      this.instance = undefined;
+  }
+
+  static setMigrationDir(dir: string): void {
+    if (this.instance) {
+      this.instance.migrations_dir = dir;
     }
   }
 }
